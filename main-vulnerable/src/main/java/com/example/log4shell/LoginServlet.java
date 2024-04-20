@@ -4,6 +4,11 @@ import java.io.*;
 import javax.servlet.ServletException;
 import javax.servlet.http.*;
 import javax.servlet.annotation.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.OutputStream;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.sun.deploy.net.HttpRequest;
 import org.apache.logging.log4j.LogManager;
@@ -18,22 +23,24 @@ public class LoginServlet extends HttpServlet {
 
         String userName = req.getParameter("uname");
         String password = req.getParameter("password");
+        HttpClient httpclient = HttpClients.createDefault();
+        HttpPost httppost = new HttpPost("http://localhost:8080");
 
-        resp.setContentType("text/html");
-        PrintWriter out = resp.getWriter();
-        out.println("<html><body>");
+        // Request parameters and other properties.
+        List<NameValuePair> params = new ArrayList<NameValuePair>(2);
+        params.add(new BasicNameValuePair("param-1", "12345"));
+        params.add(new BasicNameValuePair("param-2", "Hello!"));
+        httppost.setEntity(new UrlEncodedFormEntity(params, "UTF-8"));
 
-        if(userName.equals("admin") && password.equals("password")){
-            out.println("Welcome Back Admin");
-        }
-        else{
+        //Execute and get the response.
+        HttpResponse response = httpclient.execute(httppost);
+        HttpEntity entity = response.getEntity();
 
-            // vulnerable code
-            Logger logger = LogManager.getLogger(com.example.log4shell.log4j.class);
-            logger.error(userName);
-
-            out.println("<code> the password you entered was invalid, <u> we will log your information </u> </code>");
-        }
+        if (entity != null) {
+            try (InputStream instream = entity.getContent()) {
+                out.print("Yay output");
+    }
+}
     }
 
     public void destroy() {
