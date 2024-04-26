@@ -21,7 +21,18 @@ from base64 import b64encode
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
+
 from termcolor import cprint
+
+def safe_cprint(text, color=None):
+    """安全地打印文本，忽略无法编码的字符"""
+    try:
+        cprint(text, color)
+    except UnicodeEncodeError:
+        cleaned_text = text.encode('ascii', errors='ignore').decode('ascii')
+        cprint(cleaned_text, color)
+
+# 然后在您的代码中替换所有的 cprint 调用为 safe_cprint
 
 
 # Disable SSL warnings
@@ -32,9 +43,10 @@ except Exception:
     pass
 
 
-cprint('[•] CVE-2021-44228 - Apache Log4j RCE Scanner', "green")
-cprint('[•] Scanner provided by FullHunt.io - The Next-Gen Attack Surface Management Platform.', "yellow")
-cprint('[•] Secure your External Attack Surface with FullHunt.io.', "yellow")
+safe_cprint('[•] CVE-2021-44228 - Apache Log4j RCE Scanner', "green")
+safe_cprint('[•] Scanner provided by FullHunt.io - The Next-Gen Attack Surface Management Platform.', "yellow")
+safe_cprint('[•] Secure your External Attack Surface with FullHunt.io.', "yellow")
+
 
 if len(sys.argv) <= 1:
     print('\n%s -h for help.' % (sys.argv[0]))
@@ -131,7 +143,7 @@ parser.add_argument("--test-CVE-2021-45046",
                     action='store_true')
 parser.add_argument("--dns-callback-provider",
                     dest="dns_callback_provider",
-                    help="DNS Callback provider [Default: interact.sh].",
+                    help="DNS Callback provider (Options: dnslog.cn, interact.sh) - [Default: interact.sh].",
                     default="interact.sh",
                     action='store')
 parser.add_argument("--custom-ip-callback-host",
@@ -147,7 +159,28 @@ parser.add_argument("--disable-http-redirects",
                     help="Disable HTTP redirects. Note: HTTP redirects are useful as it allows the payloads to have a higher chance of reaching vulnerable systems.",
                     action='store_true')
 
+
 args = parser.parse_args()
+
+class Dnslog:
+    def __init__(self):
+        self.s = requests.session()
+        req = self.s.get("http://www.dnslog.cn/getdomain.php", timeout=30)
+        self.domain = req.text
+
+    def pull_logs(self):
+        try:
+            req = self.s.get("http://www.dnslog.cn/getrecords.php", timeout=30)
+            req.raise_for_status()  # 将抛出异常，如果状态码不是 200
+            return req.json()
+        except requests.exceptions.HTTPError as e:
+            print(f"HTTP error occurred: {e}")  # HTTP错误
+        except requests.exceptions.RequestException as e:
+            print(f"Request exception: {e}")  # 请求异常
+        except json.decoder.JSONDecodeError as e:
+            print(f"JSON Decode Error: {e}")  # JSON解码错误
+            print("Response content:", req.text)  # 打印响应内容，这对调试非常有用
+            return {}  # 返回一个空字典或适当的默认值
 
 
 proxies = {}
@@ -307,14 +340,14 @@ def scan_url(url, callback_host):
 
     if args.cve_2021_45046:
         if args.custom_ip_callback_host:
-            cprint(f"CVE-2021-45046 testing cannot be used with IP Callback Host. Please use DNS. Skipping...", "red")
+            safe_cprint(f"CVE-2021-45046 testing cannot be used with IP Callback Host. Please use DNS. Skipping...", "red")
             exit(1)
         else:
-            cprint(f"[•] Scanning for CVE-2021-45046 (Log4j v2.15.0 Patch Bypass - RCE)", "yellow")
+            safe_cprint(f"[•] Scanning for CVE-2021-45046 (Log4j v2.15.0 Patch Bypass - RCE)", "yellow")
             payloads = get_cve_2021_45046_payloads(f'{parsed_url["host"]}.{callback_host}', random_string)
 
     for payload in payloads:
-        cprint(f"[•] URL: {url} | PAYLOAD: {payload}", "cyan")
+        safe_cprint(f"[•] URL: {url} | PAYLOAD: {payload}", "cyan")
 
         if args.request_type.upper() == "GET" or args.run_all_tests:
             try:
@@ -327,7 +360,7 @@ def scan_url(url, callback_host):
                                  allow_redirects=(not args.disable_redirects),
                                  proxies=proxies)
             except Exception as e:
-                cprint(f"EXCEPTION: {e}")
+                safe_cprint(f"EXCEPTION: {e}")
 
         if args.request_type.upper() == "POST" or args.run_all_tests:
             try:
@@ -342,7 +375,7 @@ def scan_url(url, callback_host):
                                  allow_redirects=(not args.disable_redirects),
                                  proxies=proxies)
             except Exception as e:
-                cprint(f"EXCEPTION: {e}")
+                safe_cprint(f"EXCEPTION: {e}")
 
             try:
                 # JSON body
@@ -356,7 +389,7 @@ def scan_url(url, callback_host):
                                  allow_redirects=(not args.disable_redirects),
                                  proxies=proxies)
             except Exception as e:
-                cprint(f"EXCEPTION: {e}")
+                safe_cprint(f"EXCEPTION: {e}")
 
 
 def main():
@@ -373,38 +406,40 @@ def main():
 
     callback_host = ""
     if args.custom_dns_callback_host:
-        cprint(f"[•] Using custom DNS Callback host [{args.custom_dns_callback_host}]. No verification will be done after sending fuzz requests.")
+        safe_cprint(f"[•] Using custom DNS Callback host [{args.custom_dns_callback_host}]. No verification will be done after sending fuzz requests.")
         callback_host = args.custom_dns_callback_host
     elif args.custom_ip_callback_host:
         print(f"[•] Using custom IP Callback host [{args.custom_ip_callback_host}]. No verification will be done after sending fuzz requests.")
         callback_host = args.custom_ip_callback_host
     else:
-        cprint(f"[•] Initiating DNS callback server ({args.dns_callback_provider}).")
+        safe_cprint(f"[•] Initiating DNS callback server ({args.dns_callback_provider}).")
         if args.dns_callback_provider == "interact.sh":
             dns_callback = Interactsh()
+        elif args.dns_callback_provider == "dnslog.cn":
+            dns_callback = Dnslog()  # Assume Dnslog class is defined elsewhere as provided.
         else:
             raise ValueError("Invalid DNS Callback provider")
         callback_host = dns_callback.domain
 
-    cprint("[%] Checking for Log4j RCE CVE-2021-44228.", "magenta")
+    safe_cprint("[%] Checking for Log4j RCE CVE-2021-44228.", "magenta")
     for url in urls:
-        cprint(f"[•] URL: {url}", "magenta")
+        safe_cprint(f"[•] URL: {url}", "magenta")
         scan_url(url, callback_host)
 
     if args.custom_dns_callback_host or args.custom_ip_callback_host:
-        cprint("[•] Payloads sent to all URLs. Custom Callback host is provided, please check your logs to verify the existence of the vulnerability. Exiting.", "cyan")
+        safe_cprint("[•] Payloads sent to all URLs. Custom Callback host is provided, please check your logs to verify the existence of the vulnerability. Exiting.", "cyan")
         return
 
-    cprint("[•] Payloads sent to all URLs. Waiting for DNS OOB callbacks.", "cyan")
-    cprint("[•] Waiting...", "cyan")
+    safe_cprint("[•] Payloads sent to all URLs. Waiting for DNS OOB callbacks.", "cyan")
+    safe_cprint("[•] Waiting...", "cyan")
     time.sleep(int(args.wait_time))
     records = dns_callback.pull_logs()
     if len(records) == 0:
-        cprint("[•] Targets do not seem to be vulnerable.", "green")
+        safe_cprint("[•] Targets do not seem to be vulnerable.", "green")
     else:
-        cprint("[!!!] Targets Affected", "yellow")
+        safe_cprint("[!!!] Targets Affected", "yellow")
         for i in records:
-            cprint(json.dumps(i), "yellow")
+            safe_cprint(json.dumps(i), "yellow")
 
 
 if __name__ == "__main__":
