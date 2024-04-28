@@ -8,16 +8,16 @@
 </head>
 <body>
 <div class="h-screen flex">
-    <div class="flex w-1/2 bg-gradient-to-tr from-blue-800 to-purple-700 i justify-around items-center">
+    <div class="flex w-1/2 bg-gradient-to-tr from-blue-800 to-green-700 i justify-around items-center">
         <div>
             <h1 class="text-white font-bold text-4xl font-sans">GoFinance</h1>
             <p class="text-white mt-1">The most popular peer to peer lending at SEA</p>
-            <button type="submit" class="block w-28 bg-white text-indigo-800 mt-4 py-2 rounded-2xl font-bold mb-2">Read More</button>
+            <button type="submit" class="block w-28 bg-white text-green-800 mt-4 py-2 rounded-2xl font-bold mb-2">Read More</button>
         </div>
     </div>
     <div class="flex w-1/2 justify-center items-center bg-white">
         <form class="bg-white" method="POST" action="/login">
-            <h1 class="text-gray-800 font-bold text-2xl mb-1">Hello Again!</h1>
+            <h1 class="text-gray-800 font-bold text-2xl mb-1">We changed it!</h1>
             <p class="text-sm font-normal text-gray-600 mb-7">Welcome Back</p>
             <div class="flex items-center border-2 py-2 px-3 rounded-2xl mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -31,7 +31,7 @@
                 </svg>
                 <input class="pl-2 outline-none border-none" type="text" name="password" placeholder="Password" />
             </div>
-            <button type="submit" class="block w-full bg-indigo-600 mt-4 py-2 rounded-2xl text-white font-semibold mb-2">Login</button>
+            <button type="submit" class="block w-full bg-green-600 mt-4 py-2 rounded-2xl text-white font-semibold mb-2">Login</button>
             <span class="text-sm ml-2 hover:text-blue-500 cursor-pointer">Forgot Password ?</span>
         </form>
     </div>
