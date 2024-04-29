@@ -10,6 +10,19 @@ loginButton.addEventListener("click", (e) => {
   const username = loginForm.username.value;
   const password = loginForm.password.value;
 
+  fetch("/8080/login", {
+    method: "POST",
+    body: JSON.stringify({
+      uname: '1',
+      password: 'abc'
+    }),
+    headers: {
+      "Content-type": "application/x-www-form-urlencoded"
+    }
+  })
+    .then((response) => response.json())
+    .then((json) => console.log(json));
+
   if (username === "admin" && password === "loser") {
     // If the credentials are valid, show an alert box and reload the page
     alert("You have successfully logged in.");
