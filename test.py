@@ -31,6 +31,7 @@ def combine_domain(endpoints):
             endpoints[i] = domain + endpoints[i]
             endpoints[i] = endpoints[i] .replace('//', '/')
             endpoints[i] = endpoints[i] .replace('/', '//', 1)
+    print(endpoints)
     return endpoints
 
 
@@ -38,12 +39,13 @@ def fetch_api_urls(urls):
     result = []
     # send http
     for url in urls:
-        if "http" not in url or "https" not in url:
-            break
+        if "http" not in url and "https" not in url:
+            continue
         response = requests.get(url)
         soup = BeautifulSoup(response.content)
         soup_string = str(soup)
         result = result + extract_urls(soup_string)
+    result = list(set(result))
     return result
 
 
@@ -54,11 +56,11 @@ def save_urls_to_file(urls, filename):
             file.write(url + '\n')
 
 
-print("Enter the url you want to test:")
-web_url = input()
-print("Enter the domain of the url (Optional):")
-domain = input()
-print(domain)
+# print("Enter the url you want to test:")
+# web_url = input()
+# print("Enter the domain of the url:")
+# domain = input()
+# print(domain)
 urls = (fetch_js_urls(web_url))
 third_parties = (fetch_api_urls(combine_domain(urls)))
 save_urls_to_file(third_parties, output_file)
